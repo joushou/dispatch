@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>dispatch</title>
+	<style>
+		body {
+			position: fixed;
+			height: 100%;
+			width: 100%;
+			margin: 0px;
+		}
+		#header {
+			font-size: 70px;
+			font-family: monospace;
+			border-bottom-width: 1px;
+			border-bottom-style: solid;
+			border-bottom-color: black;
+			width: 100%;
+			margin: 0px;
+		}
+
+		#body {
+			height: 100%;
+		}
+
+		.sidebar {
+			width: 200px;
+			height: 100%;
+			border-right-width: 1px;
+			border-right-style: solid;
+			border-right-color: black;
+		}
+
+		.sidebar_selected {
+			background-color: #DDDDDD;
+		}
+
+		.sidebar_item {
+			font-family: Helvetica;
+			height: 50px;
+			padding-top: 5px;
+			padding-bottom: 5px;
+			padding-left: 15px;
+			padding-right: 15px;
+			font-size: 20px;
+		}
+
+		.sidebar_descr {
+			font-size: 10px;
+		}
+
+		.tableview {
+			height: 100px;
+		}
+	</style>
+</head>
+<body>
+	<div id='header'>
+			dispatch
+	</div>
+	<div id='body'>
+		<div id='s1'></div>
+		<div id='content'></div>
+	</div>
+	<script>
+		Array.prototype.each = function(f) {
+			for(var i = 0, len = this.length; i < len; ++i)
+				if(f(this[i], i)) return true;
+			return false;
+		}
+
+		var getURL = function(url, cb) {
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function(){
+				switch(xhr.readyState) {
+					case 4: // This means taht the response is ready - error or not
+						if (xhr.status === 200) cb(xhr.responseText);
+					case 3: // Bah, can't remember these. Look em' up.
+					case 2: // ... It's not like they're interesting anyway.
+					case 1:
+					default:
+						break;
+				}
+			}
+			xhr.open("GET", url, true);
+			xhr.send();
+		}
+
+		var sidebar = function(s) {
+			s.className = 'sidebar';
+			var items = [];
+			var selected = '';
+			var callback = function(){};
+
+			var updateSelection = function(id) {
+				items.each(function(k){
+					if(k.id === id) k.node.className = "sidebar_item sidebar_selected";
+					else k.node.className = "sidebar_item";
+				});
+				selected = id;
+				callback(id);
+			};
+
+			var makeClickHandler = function(id, node) {
+				node.onclick = function() {
+					updateSelection(id)
+				};
+			};
+
+			var cleanupItems = function() {
+				var x = items;
+				items = [];
+				x.each(function(k){ if(k.clean) items.push(k); })
+			}
+
+			var removeItem = function(k) {
+				if(selected = k.id && items.length > 1) {
+					var i = items.indexOf(k);
+					if(i === 0) ++i;
+					var x = items[i-1];
+					updateSelection(x.id);
+				}
+				s.removeChild(k.node);
+			}
+
+			var addItem = function(id, name, descr) {
+				var found = false;
+				if (items.each(function(k){if(k.id === id) { k.clean = true; return true;} })) return;
+				var div1 = document.createElement('DIV');
+				var div2 = document.createElement('DIV');
+				var t1 = document.createTextNode(name);
+				var t2 = document.createTextNode(descr);
+				div1.className = 'sidebar_item';
+				div2.className ='sidebar_descr';
+				div2.appendChild(t2);
+				div1.appendChild(t1);
+				div1.appendChild(div2);
+				makeClickHandler(id, div1);
+				s.appendChild(div1);
+				items.push({id: id, name: t1, descr: t2, node: div1, clean: true});
+			};
+
+			var update = function(arr) {
+				items.each(function(k){ k.clean = false; });
+				arr.each(function(k){
+					addItem(k, 'Client', k);
+				});
+				items.each(function(k){if(!k.clean)removeItem(k);});
+				cleanupItems();
+			}
+
+			var setCallback = function(cb) {
+				callback = cb;
+			}
+
+			return {
+				update: update,
+				setCallback: setCallback
+			}
+		}
+		var s = new sidebar(document.getElementById('s1'))
+
+		s.setCallback(function(n){
+			console.log('Clicked', n);
+		});
+
+		function getClients(){
+			getURL('/clients', function(k){
+				s.update(eval(k));
+			});
+			return getClients;
+		}
+		setInterval(getClients(), 5000)
+
+		// insert_to_sidebar('Client 1', 'Some random client', function(){console.log('WEE')})
+		// insert_to_sidebar('WEE', '!!', function(){console.log('WEE')})
+	</script>
+</body>
+</html>
