@@ -9,7 +9,12 @@ from stackable.stack import Stack
 from runnable.runnable import ExecRunnable
 from runnable.network import RunnableServer, RequestObject
 
+from threading import Thread
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from json import dumps
+
 clients = []
+
 class Dispatcher(RequestObject):
 	def init(self):
 		self.stack = Stack((StackableSocket(sock=self.conn),
@@ -39,6 +44,37 @@ class Dispatcher(RequestObject):
 		except StackableError:
 			return False
 
+class DispatchMonitor(BaseHTTPRequestHandler):
+	def do_HEAD(s):
+		s.send_response(200)
+		s.send_header("Content-type", "text/html")
+		s.end_headers()
+
+	def do_GET(s):
+		"""Respond to a GET request."""
+		if s.path == '/':
+			s.send_response(200)
+			s.send_header("Content-type", "text/html")
+			s.end_headers()
+			with open('index.html') as f:
+				s.wfile.write(f.read())
+		elif s.path == '/clients':
+			s.send_response(200)
+			s.send_header("Content-Type", "application/json")
+			s.end_headers()
+			s.wfile.write(dumps([str(i) for i in clients]))
+
 if __name__ == '__main__':
+	print('[DISPATCHER] Starting dispatch server')
 	server = RunnableServer({'reqObj': Dispatcher, 'port': 2501})
-	server.execute()
+	s = Thread(target=server.execute)
+	s.daemon = True
+	s.start()
+	print('[DISPATCHER] Starting monitor')
+	monitor = HTTPServer(('', 8080), DispatchMonitor)
+	try:
+		monitor.serve_forever()
+	except KeyboardInterrupt:
+		pass
+	monitor.server_close()
+	print('[DISPATCHER] Server shutdown complete')
