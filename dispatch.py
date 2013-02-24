@@ -5,31 +5,40 @@ from pickle import dumps
 from subprocess import Popen, PIPE
 from threading import Thread
 
-dispatch_clients = []
+class Dispatched(object):
+	def __init__(self, w):
+		self.w      = w
+		self.retval = None
 
 class DispatchManager(object):
 	def __init__(self):
 		self.processes = []
 
-	def monitor(self, p):
+	def monitor(self, p, d):
 		def wait():
 			p.wait()
 			self.processes.remove(p)
-			print('[RETURN]', p.stdout.read())
+			d.response = p.stdout.read()
+			self.complete(d)
 		Thread(target=wait).start()
 
-	def dispatch(self, w):
-		p = Popen(['pypy', '-c', 'from runnable.runnable import Runnable;from pickle import loads;from sys import stdin, argv;loads(argv[1]).execute()', dumps(w)], stdout=PIPE)
+	def dispatch(self, d):
+		p = Popen(['pypy', '-c', 'from runnable.runnable import Runnable;from pickle import loads;from sys import argv;loads(argv[1]).execute()', dumps(d.w)], stdout=PIPE)
 		self.processes.append(p)
-		self.monitor(p)
+		self.monitor(p, d)
 
-	def retval(self, client, w):
-		print('[', client, ' - RV]:', w.response)
+	def complete(self, d):
+		print('['+str(d)+']:', d.response)
 
-global mgr
+	def killall(self):
+		x = self.processes
+		for i in x:
+			i.kill()
+			self.processes.remove(i)
+
 mgr = DispatchManager()
 
 if __name__ == '__main__':
 	print("[DISPATCHER] UP")
-	mgr.dispatch(ExecRunnable('print "WEEEE"; import sys; import time; print sys.path; time.sleep(3)'))
+	mgr.dispatch(Dispatched(ExecRunnable('print "WEEEE"')))
 	input()
