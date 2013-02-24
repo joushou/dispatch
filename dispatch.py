@@ -1,14 +1,15 @@
 from __future__ import print_function, absolute_import, unicode_literals, division
 from runnable.runnable import ExecRunnable
+from stackable.stack import Stack
+from stackable.utils import StackablePickler
+from stackable.network import StackableSocket, StackablePacketAssembler
+
+from messages import DispatchInquiry, Dispatched
 
 from pickle import dumps
 from subprocess import Popen, PIPE
 from threading import Thread
-
-class Dispatched(object):
-	def __init__(self, w):
-		self.w      = w
-		self.retval = None
+from sys import argv
 
 class DispatchManager(object):
 	def __init__(self):
@@ -18,8 +19,8 @@ class DispatchManager(object):
 		def wait():
 			p.wait()
 			self.processes.remove(p)
-			d.response = p.stdout.read()
-			self.complete(d)
+			d.output = p.stdout.read()
+			d.cb(d)
 		Thread(target=wait).start()
 
 	def dispatch(self, d):
@@ -27,8 +28,6 @@ class DispatchManager(object):
 		self.processes.append(p)
 		self.monitor(p, d)
 
-	def complete(self, d):
-		print('['+str(d)+']:', d.response)
 
 	def killall(self):
 		x = self.processes
@@ -39,6 +38,20 @@ class DispatchManager(object):
 mgr = DispatchManager()
 
 if __name__ == '__main__':
-	print("[DISPATCHER] UP")
-	mgr.dispatch(Dispatched(ExecRunnable('print "WEEEE"')))
-	input()
+	print("[DISPATCHER] Ready")
+	stack = Stack((StackableSocket(ip=argv[1], port=int(argv[2])),
+	              StackablePacketAssembler(),
+	              StackablePickler()))
+
+	def complete_cb(d):
+		del d.cb
+		print('[DISPATCHER] Job complete')
+		stack.write(d)
+
+	while True:
+		o = stack.read()
+		if isinstance(o, DispatchInquiry):
+			if o.msg == 'dispatch':
+				print('[DISPATCHER] Dispatching job')
+				mgr.dispatch(Dispatched(o.payload, complete_cb))
+
