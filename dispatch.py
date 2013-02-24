@@ -24,7 +24,6 @@ class DispatchManager(object):
 	def spawn(self, num):
 		for i in range(0, num):
 			p = Popen(['pypy', 'node.py', '0.0.0.0', '2501'])
-			dir(p)
 
 global mgr
 mgr = DispatchManager()
