@@ -32,7 +32,8 @@
 		}
 
 		.sidebar_selected {
-			background-color: #DDDDDD;
+			background-color: #888;
+			color: white;
 		}
 
 		.sidebar_item {
@@ -53,15 +54,6 @@
 			height: 100px;
 		}
 	</style>
-</head>
-<body>
-	<div id='header'>
-			dispatch
-	</div>
-	<div id='body'>
-		<div id='s1'></div>
-		<div id='content'></div>
-	</div>
 	<script>
 		Array.prototype.each = function(f) {
 			for(var i = 0, len = this.length; i < len; ++i)
@@ -158,6 +150,17 @@
 				setCallback: setCallback
 			}
 		}
+	</script>
+</head>
+<body>
+	<div id='header'>
+			dispatch
+	</div>
+	<div id='body'>
+		<div id='s1'></div>
+		<div id='content'></div>
+	</div>
+	<script>
 		var s = new sidebar(document.getElementById('s1'))
 
 		s.setCallback(function(n){
@@ -171,9 +174,6 @@
 			return getClients;
 		}
 		setInterval(getClients(), 5000)
-
-		// insert_to_sidebar('Client 1', 'Some random client', function(){console.log('WEE')})
-		// insert_to_sidebar('WEE', '!!', function(){console.log('WEE')})
 	</script>
 </body>
 </html>
