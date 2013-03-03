@@ -1,31 +1,31 @@
 from __future__ import print_function, absolute_import, unicode_literals, division
 from messages import DispatchInquiry, Dispatched
+from web import DispatchMonitor
+from root import RootDispatcher
 
 from stackable.stackable import StackableError
 from stackable.network import StackableSocket, StackablePacketAssembler
 from stackable.utils import StackablePickler
 from stackable.stack import Stack
 
-from runnable.runnable import ExecRunnable
 from runnable.network import RunnableServer, RequestObject
 
-from threading import Thread
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-from json import dumps
+from BaseHTTPServer import HTTPServer
 
-clients = []
+from threading import Thread
+
+root = RootDispatcher()
 
 class Dispatcher(RequestObject):
+	'The connection objects - represents a connected dispatching node'
 	def init(self):
 		self.stack = Stack((StackableSocket(sock=self.conn),
 		                   StackablePacketAssembler(),
 		                   StackablePickler()))
-		clients.append(self)
-
-		self.dispatch(DispatchInquiry(msg='dispatch', payload=ExecRunnable('print "WEEEE"; import sys; print sys.path')))
+		root.register(self)
 
 	def destroy(self):
-		clients.remove(self)
+		root.deregister(self)
 		self.stack.close()
 		del self.stack
 
@@ -36,33 +36,16 @@ class Dispatcher(RequestObject):
 		try:
 			obj = self.stack.poll()
 			if obj != None:
-				if isinstance(obj,Dispatched):
-					print('[RETVAL]', obj.output)
+				if isinstance(obj,DispatchInquiry):
+					root.report(obj)
 				else:
-					print("[ERROR]", type(obj))
+					print("[ERROR]", type(obj), str(self))
 			return True
 		except StackableError:
 			return False
 
-class DispatchMonitor(BaseHTTPRequestHandler):
-	def do_HEAD(s):
-		s.send_response(200)
-		s.send_header("Content-type", "text/html")
-		s.end_headers()
-
-	def do_GET(s):
-		"""Respond to a GET request."""
-		if s.path == '/':
-			s.send_response(200)
-			s.send_header("Content-type", "text/html")
-			s.end_headers()
-			with open('index.html') as f:
-				s.wfile.write(f.read())
-		elif s.path == '/clients':
-			s.send_response(200)
-			s.send_header("Content-Type", "application/json")
-			s.end_headers()
-			s.wfile.write(dumps([str(i) for i in clients]))
+	def __repr__(self):
+		return "<Dispatcher object at "+str(hex(id(self)))+">"
 
 if __name__ == '__main__':
 	print('[DISPATCHER] Starting dispatch server')
