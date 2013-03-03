@@ -1,0 +1,83 @@
+body {
+	position: fixed;
+	height: 100%;
+	width: 100%;
+	margin: 0px;
+}
+#container {
+	position: absolute;
+	height: 100%;
+	width: 100%;
+}
+#header {
+	/*background-color: #404990;*/
+	color: white;
+	text-align: right;
+	font-size: 25px;
+	height: 30px;
+	padding-right: 20px;
+	font-family: monospace;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: black;
+	width: 100%;
+	margin: 0px;
+
+background-image: -webkit-linear-gradient(top, rgb(228, 228, 238) 0%, rgb(204, 204, 204) 100%);
+}
+#body {
+	height: 100%;
+}
+.sidebar {
+	float: left;
+	background-color: #EEE;
+	width: 200px;
+	height: 100%;
+	border-right-width: 1px;
+	border-right-style: solid;
+	border-right-color: black;
+}
+.sidebar_item {
+	font-family: Helvetica;
+	opacity: 1;
+	height: 50px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	padding-left: 15px;
+	padding-right: 15px;
+	font-size: 20px;
+	background-color: #DDDDDD;
+	color: black;
+}
+.sidebar_item:hover {
+	background-color: #D0D0D0;
+	color: black;
+}
+.sidebar_selected {
+	background-color: #888;
+	color: white;
+}
+.sidebar_selected:hover {
+	background-color: #777;
+	color: white;
+}
+.sidebar_descr {
+	font-size: 10px;
+}
+.main {
+	float: right;
+	position: absolute;
+	right: 0px;
+	left: 201px;
+	height: 100%;
+}
+#table {
+	position: relative;
+	background-color: #EEE;
+	height: 30%;
+}
+#editor {
+	position: relative;
+	width: 100%;
+	height: 70%;
+}
