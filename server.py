@@ -1,6 +1,4 @@
 from __future__ import print_function, absolute_import, unicode_literals, division
-from messages import DispatchInquiry, Dispatched
-from web import DispatchMonitor
 from root import RootDispatcher
 
 from stackable.stackable import StackableError
@@ -10,11 +8,9 @@ from stackable.stack import Stack
 
 from runnable.network import RunnableServer, RequestObject
 
-from BaseHTTPServer import HTTPServer
-
-from threading import Thread
-
 root = RootDispatcher()
+
+root.put("welcome", compile('print("Welcome")', "<root dispatcher>", mode='exec'))
 
 class Dispatcher(RequestObject):
 	'The connection objects - represents a connected dispatching node'
@@ -30,16 +26,19 @@ class Dispatcher(RequestObject):
 		del self.stack
 
 	def dispatch(self, w):
-		self.stack.write(w)
+		self.stack.write({'cmd': 'execute', 'mod_name': w})
 
 	def receive(self):
 		try:
 			obj = self.stack.poll()
 			if obj != None:
-				if isinstance(obj,DispatchInquiry):
-					root.report(obj)
+				if 'req' in obj:
+					if obj['req'] == 'module':
+						self.stack.write({'cmd': 'module', 'args': {'name': obj['args'], 'module': root.retrieve(obj['args'])}})
+					elif obj['req'] == 'probe_module':
+						self.stack.write({'cmd': 'module_probe', 'args': {'name': obj['args'], 'module': root.check(obj['args'])}})
 				else:
-					print("[ERROR]", type(obj), str(self))
+					print('[DISPATCHER] Unknown blob:', obj)
 			return True
 		except StackableError:
 			return False
@@ -49,15 +48,5 @@ class Dispatcher(RequestObject):
 
 if __name__ == '__main__':
 	print('[DISPATCHER] Starting dispatch server')
-	server = RunnableServer({'reqObj': Dispatcher, 'port': 2501})
-	s = Thread(target=server.execute)
-	s.daemon = True
-	s.start()
-	print('[DISPATCHER] Starting monitor')
-	monitor = HTTPServer(('', 8080), DispatchMonitor)
-	try:
-		monitor.serve_forever()
-	except KeyboardInterrupt:
-		pass
-	monitor.server_close()
-	print('[DISPATCHER] Server shutdown complete')
+	server = RunnableServer(2501, Dispatcher)
+	server.execute()
