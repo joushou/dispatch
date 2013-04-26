@@ -1,5 +1,4 @@
-from messages import DispatchInquiry, Dispatched
-from runnable.runnable import ExecRunnable
+from __future__ import print_function, absolute_import, unicode_literals, division
 
 def singleton(cls):
 	instances = {}
@@ -9,51 +8,54 @@ def singleton(cls):
 		return instances[cls]
 	return getinstance
 
-class InquiryManager(object):
+class RootLibrary(object):
 	def __init__(self):
-		self.inqs = []
+		self.modules = {}
 
-	def resolve(self, inq):
-		x = None
-		for i in self.inqs:
-			if i.id == inq.id:
-				x = i
-				break
-		else:
-			self.inqs.append(inq)
-			return inq
+	def createModule(self, name, mod):
+		self.modules[name] = mod
 
-		x.resp = inq.resp
-		self.inqs.remove(x)
-		return x
+	def getModule(self, name):
+		try:
+			return self.modules[name]
+		except KeyError:
+			return None
 
-inq_mgr = InquiryManager()
+	def checkModule(self, name):
+		return name in self.modules
+
 
 @singleton
 class RootDispatcher(object):
 	'The central controller thing'
 	def __init__(self):
 		self.clients = []
-		self.pending = []
-		self.completed = []
+		self.lib = RootLibrary()
 
-	def dispatch(self, w):
-		print('[ROOT] Dispatching:', w)
-		for i in self.clients:
-			if str(i) == w.tgt:
-				w = inq_mgr.resolve(w)
-				self.pending.append(w)
-				i.dispatch(w)
+	def get(self, i):
+		return self.clients[i]
+
+	def dispatch(self, i, w):
+		print('[ROOT] Order:', w)
+		i.dispatch(w)
+
+	def retrieve(self, name):
+		print('[ROOT] Dispatching:', name)
+		return self.lib.getModule(name)
+
+	def check(self, name):
+		print('[ROOT] Checking:', name)
+		return self.lib.checkModule(name)
+
+	def put(self, name, module):
+		print('[ROOT] Inserting:', name)
+		return self.lib.createModule(name, module)
 
 	def report(self, w):
-		w = inq_mgr.resolve(w)
-		self.completed.append(w)
-		self.pending.remove(w)
 		print('[ROOT] Return:', w.resp)
 
 	def register(self, d):
 		self.clients.append(d)
-		self.dispatch(DispatchInquiry(payload=ExecRunnable('print "Welcome"'), tgt=str(d)))
 
 	def deregister(self, d):
 		self.clients.remove(d)
