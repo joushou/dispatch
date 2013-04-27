@@ -24,7 +24,6 @@ class RootLibrary(object):
 	def checkModule(self, name):
 		return name in self.modules
 
-
 @singleton
 class RootDispatcher(object):
 	'The central controller thing'
@@ -32,30 +31,23 @@ class RootDispatcher(object):
 		self.clients = []
 		self.lib = RootLibrary()
 
-	def get(self, i):
-		return self.clients[i]
-
-	def dispatch(self, i, w):
-		print('[ROOT] Order:', w)
-		i.dispatch(w)
+	def get(self, _id):
+		for i in self.clients:
+			if i.uuid == _id:
+				return i
 
 	def retrieve(self, name):
 		print('[ROOT] Dispatching:', name)
 		return self.lib.getModule(name)
 
-	def check(self, name):
-		print('[ROOT] Checking:', name)
-		return self.lib.checkModule(name)
-
 	def put(self, name, module):
 		print('[ROOT] Inserting:', name)
 		return self.lib.createModule(name, module)
 
-	def report(self, w):
-		print('[ROOT] Return:', w.resp)
-
 	def register(self, d):
+		print('[ROOT] Registering:', d.uuid)
 		self.clients.append(d)
 
 	def deregister(self, d):
+		print('[ROOT] Deregistering:', d.uuid)
 		self.clients.remove(d)
