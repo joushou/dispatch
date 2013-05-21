@@ -8,6 +8,7 @@ from runnable.network import RunnableServer, RequestObject
 from subprocess import Popen, PIPE
 from threading import Thread, Lock
 from sys import argv
+from uuid import uuid4
 
 class Job(object):
 	def __init__(self, name, p, _id):
@@ -48,6 +49,8 @@ class DispatchManager(object):
 		self.mod_cbs = {}
 		self.stack = None
 		self.job_cnt = 0
+		self.id = str(uuid4())
+		self.com_id = 0
 		if ip != None and port != None:
 			self.connect(ip, port)
 
@@ -56,29 +59,47 @@ class DispatchManager(object):
 				         	  StackablePacketAssembler(),
 				         	  StackablePickler()))
 
+	def reply(self, cmd, args):
+		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
+
+	def send(self, cmd, args):
+		self.com_id += 1
+		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
+
+	def handle(self, obj):
+		cmd = obj['cmd']
+		args = obj['args']
+		if cmd == 'init':
+			self.id = args['uuid']
+			print("[DISPATCHER] Setting UUID: %s" % self.id)
+		elif cmd == 'execute':
+			j = self.dispatch(args['name'], lambda d: self.send('status_update', {'job_id': d.id, 'status': d.status()}))
+			self.send('dispatched', {'name': j.name, 'pid': 0, 'job_id': j.id})
+		elif cmd == 'kill':
+			job = self.get_job(args['job_id'])
+			job.kill()
+			self.send('status_update', {'job_id': job.id, 'status': job.status()})
+			self.processes.remove(job)
+		elif cmd == 'module_update':
+			name = args['name']
+			version = args['version']
+			description = args['description']
+			mod = args['module']
+			self.cache[name] = (name, mod, version, description)
+			if name in self.mod_cbs:
+				for i in self.mod_cbs[name]:
+					i(mod)
+		elif cmd == 'get_status':
+			job = self.get_job(args['job_id'])
+			self.send('status_update', {'job_id': job.id, 'status': job.status()})
+		elif cmd == 'get_jobs':
+			jobs = [{'name': job.name, 'job_id': job.id, 'modules': job.modules} for job in self.jobs]
+			self.send('job_update', {'jobs': jobs})
+
 	def monitor(self):
 		while True:
 			o = self.stack.read()
-			if 'cmd' in o:
-				if o['cmd'] == 'execute':
-					j = self.dispatch(o['mod_name'], lambda d: self.stack.write({'status': d.status(), 'id': d.id}))
-					self.stack.write({'dispatched': j.id, 'mod_name': j.name, 'pid': j.p.pid})
-				elif o['cmd'] == 'kill':
-					job = self.get_job(o['id'])
-					job.kill()
-					self.stack.write({'status': job.status(), 'id': job.id})
-					self.processes.remove(job)
-				elif o['cmd'] == 'module':
-					name, module = o['args']['name'], o['args']['module']
-					self.cache[name] = module
-					if name in self.mod_cbs:
-						for i in self.mod_cbs[name]:
-							i(module)
-			elif 'req' in o:
-				if o['req'] == 'status':
-					job = self.get_job(o['status'])
-					self.stack.write({'status': job.status(), 'id': job.id})
-
+			self.handle(o)
 
 	def get_job(self, _id):
 		for i in self.processes:
@@ -93,7 +114,7 @@ class DispatchManager(object):
 		if m not in self.mod_cbs:
 			self.mod_cbs[m] = []
 		self.mod_cbs[m].append(cb)
-		self.stack.write({"req": "module", "args": m})
+		self.send('get_module', {'name': m})
 
 	def dispatch(self, name, cb):
 		with self.plock:
