@@ -12,6 +12,7 @@ from sys import argv
 class DispatchPusher(object):
 	def __init__(self, ip=None, port=None):
 		self.stack = None
+		self.com_id = 0
 		if ip != None and port != None:
 			self.connect(ip, port)
 
@@ -20,14 +21,21 @@ class DispatchPusher(object):
 				         	  StackablePacketAssembler(),
 				         	  StackablePickler()))
 
-	def push_module(self, name, module):
-		self.stack.write({'cmd': 'module', 'args': {'name': name, 'module': module}})
+	def reply(self, cmd, args):
+		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
+
+	def send(self, cmd, args):
+		self.com_id += 1
+		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
+
+	def push_module(self, name, module, version=0, description=''):
+		self.send('push_module', {'name': name, 'module': module, 'version': version, 'description': description})
 
 	def dispatch(self, dispatcher, module):
-		self.stack.write({'cmd': 'dispatch', 'args': {'dispatcher': dispatcher, 'module': module}})
+		self.send('dispatch', {'name': module, 'targets': [dispatcher]})
 
 	def status(self, dispatcher, job):
-		self.stack.write({'req': 'status', 'args': {'dispatcher': dispatcher, 'id': job}})
+		self.send('get_status', {'target': dispatcher, 'job_id': job})
 
 	def close(self):
 		self.stack.close()
