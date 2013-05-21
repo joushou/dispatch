@@ -12,8 +12,8 @@ class RootLibrary(object):
 	def __init__(self):
 		self.modules = {}
 
-	def createModule(self, name, mod):
-		self.modules[name] = mod
+	def createModule(self, name, _type, mod, version, description):
+		self.modules[name] = [mod, _type, version, description]
 
 	def getModule(self, name):
 		try:
@@ -40,9 +40,13 @@ class RootDispatcher(object):
 		print('[ROOT] Dispatching:', name)
 		return self.lib.getModule(name)
 
-	def put(self, name, module):
+	def put(self, name, _type, module, version, description):
 		print('[ROOT] Inserting:', name)
-		return self.lib.createModule(name, module)
+		return self.lib.createModule(name, _type, module, version, description)
+
+	def check(self, name):
+		mod = self.lib.getModule(name)
+		return (mod[1], mod[2], mod[3])
 
 	def register(self, d):
 		print('[ROOT] Registering:', d.uuid)
