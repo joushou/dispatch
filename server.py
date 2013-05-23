@@ -12,7 +12,9 @@ from uuid import uuid4
 
 root = RootDispatcher()
 
-root.put("welcome", "python", compile('print("Welcome")', "<root dispatcher>", mode='exec'), 0.1, "Greeting message")
+# root.put("welcome", "python", compile('print("Welcome")', "<root dispatcher>", mode='exec'), 0.1, "Greeting message")
+root.put("welcome1", None, "echo Hello from your $SHELL", "shell", {'description': "Greeting message"})
+# root.put("welcome1", "shell", "echo Hello from your $SHELL!", 0.1, "Greeting message")
 
 class Job(object):
 	def __init__(self, name, pid, _id):
@@ -35,7 +37,8 @@ class Dispatcher(RequestObject):
 		self.jobs = []
 		root.register(self)
 		self.send('init', {'uuid': self.uuid})
-		self.dispatch('welcome')
+		# self.dispatch('welcome')
+		self.dispatch('welcome1')
 
 	def destroy(self):
 		root.deregister(self)
@@ -49,9 +52,6 @@ class Dispatcher(RequestObject):
 		for i in self.jobs:
 			if i.id == _id:
 				return i
-
-	def report_jobs(self, cb):
-		pass
 
 	def print_status(self, job):
 		print('[JOB %s-%d] ---- STDOUT ----' % (self.uuid, job.id))
@@ -70,52 +70,98 @@ class Dispatcher(RequestObject):
 		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
 
 	def handle(self, obj):
-		cmd = obj['cmd']
-		args = obj['args']
+		try:
+			cmd = obj['cmd']
+			args = obj['args']
+		except:
+			print('[DISPATCHER] Unknown blob:', obj)
+			return
 		if cmd == 'get_module':
-			self.reply('return', {'status': 0, 'cmd': 'get_module'})
-			mod_name = args['name']
-			(version, _type, description) = root.check(mod_name)
-			mod = root.retrieve(mod_name)
-			self.send('module_update', {'name': mod_name, 'module': mod, 'version': version, 'type': _type, 'description': description})
+			try:
+				mod = root.retrieve(args['name'])
+				self.reply('module_update', {'module': mod})
+				self.reply('return', {'status': 0, 'cmd': 'get_module'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'get_module'})
 		elif cmd == 'probe_module':
-			self.reply('return', {'status': 0, 'cmd': 'probe_module'})
-			mod_name = args['name']
-			(version, _type, description) = root.check(mod_name)
-			self.send('module_probe', {'name': mod_name, 'version': version, 'type': _type, 'description': description})
-		elif cmd == 'probe_jobs':
-			self.reply('return', {'status': 0})
-			pass
+			try:
+				mod = root.retrieve(args['name'])
+				self.reply('module_probe', {'name': args['name'], 'meta': mod['meta'] if mod != None else None})
+				self.reply('return', {'status': 0, 'cmd': 'probe_module'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'probe_module'})
 		elif cmd == 'push_module':
-			mod_name = args['name']
-			mod = args['module']
-			version = args['version']
-			description = args['description']
-			root.put(mod_name, mod, version, description)
-			self.reply('return', {'status': 0, 'cmd': 'push_module'})
+			try:
+				root.put(args['name'],
+				         args['bytecode'],
+				         args['source'],
+				         args['type'],
+				         args['meta'])
+				self.reply('return', {'status': 0, 'cmd': 'push_module'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'push_module'})
 		elif cmd == 'dispatch':
-			mod_name = args['name']
-			targets = args['targets']
-			for target in targets:
-				client = root.get(target)
-				client.dispatch(mod_name)
-				self.reply('return', {'status': 0, 'cmd': 'dispatch', 'target': target})
+			try:
+				mod_name = args['name']
+				targets = args['targets']
+				for target in targets:
+					client = root.get(target)
+					client.dispatch(mod_name)
+					self.reply('return', {'status': 0, 'cmd': 'dispatch', 'target': target})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'dispatch'})
+		elif cmd == 'get_status':
+			try:
+				client = root.get(args['target'])
+				job = client.find_job(args['job_id'])
+				self.reply('status_update', {'status': job.status()})
+				self.reply('return', {'status': 0, 'cmd': 'get_status'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'get_status'})
+		elif cmd == 'get_clients':
+			try:
+				clients = root.get_uuids()
+				self.reply('client_list', {'clients': clients})
+				self.reply('return', {'status': 0, 'cmd': 'get_clients'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'get_clients'})
+		elif cmd == 'get_jobs':
+			try:
+				client = root.get(args['target'])
+				jobs = [{'id': i.id, 'name': i.name, 'modules': i.modules, 'alive': i.alive, 'pid': i.pid} for i in client.jobs]
+				self.reply('job_list', {'jobs': jobs, 'target': client.uuid})
+				self.reply('return', {'status': 0, 'cmd': 'get_clients'})
+			except:
+				self.reply('return', {'status': -1, 'cmd': 'get_clients'})
 
 		# Replies from dispatch
 		elif cmd == 'dispatched':
-			mod_name = args['name']
-			job_id = args['job_id']
-			pid = args['pid']
-			self.jobs.append(Job(mod_name, pid, job_id))
+			try:
+				mod_name = args['name']
+				job_id = args['job_id']
+				pid = args['pid']
+				self.jobs.append(Job(mod_name, pid, job_id))
+			except:
+				pass
+		elif cmd == 'dispatch_failed':
+			try:
+				mod_name = args['name']
+				print('[JOB %s-?] Dispatch of %s failed' % (self.uuid, mod_name))
+			except:
+				pass
 		elif cmd == 'status_update':
-			job = self.find_job(args['job_id'])
-			status = args['status']
-			job.out = status[0]
-			job.err = status[1]
-			job.modules = status[2]
-			job.alive = status[3]
-			if not job.alive:
-				self.print_status(job)
+			try:
+				job = self.find_job(args['job_id'])
+				if job != None:
+					status = args['status']
+					job.out = status[0]
+					job.err = status[1]
+					job.modules = status[2]
+					job.alive = status[3]
+					if not job.alive:
+						self.print_status(job)
+			except:
+				pass
 		else:
 			print('[DISPATCHER] Unknown blob:', obj)
 
