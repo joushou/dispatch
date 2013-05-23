@@ -9,15 +9,17 @@ from subprocess import Popen, PIPE
 from threading import Thread, Lock
 from sys import argv
 from uuid import uuid4
+from tempfile import NamedTemporaryFile
 
 class Job(object):
 	def __init__(self, name, p, _id):
 		self.name = name
 		self.p = p
+		self.pid = p.pid
 		self.id = _id
 		self.modules = []
-		self.err = ''
-		self.out = ''
+		self.err = b''
+		self.out = b''
 		self.alive = True
 
 	def kill(self):
@@ -42,6 +44,10 @@ class Job(object):
 		return x
 
 class DispatchManager(object):
+	universal_handlers = {
+		'shell': 'sh',
+		'ruby': 'ruby'
+	}
 	def __init__(self, ip=None, port=None):
 		self.processes = []
 		self.plock = Lock()
@@ -73,22 +79,19 @@ class DispatchManager(object):
 			self.id = args['uuid']
 			print("[DISPATCHER] Setting UUID: %s" % self.id)
 		elif cmd == 'execute':
-			j = self.dispatch(args['name'], lambda d: self.send('status_update', {'job_id': d.id, 'status': d.status()}))
-			self.send('dispatched', {'name': j.name, 'pid': 0, 'job_id': j.id})
+			j = self.dispatch(args['name'])
 		elif cmd == 'kill':
 			job = self.get_job(args['job_id'])
 			job.kill()
 			self.send('status_update', {'job_id': job.id, 'status': job.status()})
 			self.processes.remove(job)
 		elif cmd == 'module_update':
-			name = args['name']
-			version = args['version']
-			description = args['description']
 			mod = args['module']
-			self.cache[name] = (name, mod, version, description)
+			name = mod['name']
+			self.cache[name] = mod
 			if name in self.mod_cbs:
 				for i in self.mod_cbs[name]:
-					i(mod)
+					i(self.cache[name])
 		elif cmd == 'get_status':
 			job = self.get_job(args['job_id'])
 			self.send('status_update', {'job_id': job.id, 'status': job.status()})
@@ -101,12 +104,21 @@ class DispatchManager(object):
 			o = self.stack.read()
 			self.handle(o)
 
+	def job_completed(self, job):
+		self.send('status_update', {'job_id': job.id, 'status': job.status()})
+
+	def job_dispatched(self, job):
+		self.send('dispatched', {'name': job.name, 'pid': job.pid, 'job_id': job.id})
+
+	def job_failed_dispatch(self, name):
+		self.send('dispatch_failed', {'name': name})
+
 	def get_job(self, _id):
 		for i in self.processes:
 			if i.id == _id:
 				return i
 
-	def module(self, m, cb):
+	def get_module(self, m, cb):
 		if m in self.cache:
 			cb(self.cache[m])
 			return
@@ -116,21 +128,36 @@ class DispatchManager(object):
 		self.mod_cbs[m].append(cb)
 		self.send('get_module', {'name': m})
 
-	def dispatch(self, name, cb):
-		with self.plock:
-			print('[DISPATCHER] Spawning', name)
-			p = Job(name, Popen(['pypy', '-c', '''
+	def dispatch(self, name):
+		def callback(mod):
+			print('[DISPATCHER] Spawn of type "%s": %s' % (mod['type'], name))
+			p = None
+			if mod['type'] == 'python':
+				p = Job(name, Popen(['pypy', '-c', '''
 from sys import meta_path
 from loader import DispatchLoader as __l
-__dispatch__ = __l('%s', %s, %d)
+__dispatch__ = __l('%s', %d, %d)
 meta_path = [__dispatch__]
 del meta_path
 exec __dispatch__.get_module('%s')''' % ("localhost", 2001, self.job_cnt, name)], stdout=PIPE, stderr=PIPE), self.job_cnt)
-			self.job_cnt += 1
+			elif mod['type'] in self.universal_handlers:
+				t = NamedTemporaryFile(delete=False)
+				t.write(mod['source'])
+				t.close()
+				p = Job(name, Popen([self.universal_handlers[mod['type']], t.name], stdout=PIPE, stderr=PIPE), self.job_cnt)
+				p.modules.append(name)
 
-			self.processes.append(p)
-			p.monitor(cb)
-			return p
+			if p != None:
+				with self.plock:
+					self.job_cnt += 1
+					self.processes.append(p)
+					p.monitor(self.job_completed)
+				self.job_dispatched(p)
+			else:
+				print('[DISPATCHER] Type "%s" not supported' % mod['type'])
+				self.job_failed_dispatch(name)
+
+		self.get_module(name, callback)
 
 mgr = DispatchManager(argv[1], int(argv[2]))
 
@@ -153,9 +180,9 @@ class LoaderConnection(RequestObject):
 					def respond(x):
 						if x != None:
 							mgr.get_job(obj['id']).modules.append(obj['load'])
-						self.stack.write({'module': x})
+						self.stack.write({'module': x, 'name': obj['load']})
 
-					mgr.module(obj['load'], respond)
+					mgr.get_module(obj['load'], respond)
 				except:
 					print('[LOADER] Received malformed request:', obj)
 			return True
