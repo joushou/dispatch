@@ -7,7 +7,13 @@ from runnable.network import RunnableServer, RequestObject
 
 from subprocess import Popen, PIPE
 from threading import Thread, Lock
-from sys import argv
+from sys import argv, stdout
+import json
+
+mode = 'file'
+def draw_prompt():
+	stdout.write('\n[%s] ' % mode)
+	stdout.flush()
 
 class DispatchPusher(object):
 	def __init__(self, ip=None, port=None):
@@ -28,8 +34,8 @@ class DispatchPusher(object):
 		self.com_id += 1
 		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
 
-	def push_module(self, name, module, version=0, description=''):
-		self.send('push_module', {'name': name, 'module': module, 'version': version, 'description': description})
+	def push_module(self, name, bytecode, source, _type, meta):
+		self.send('push_module', {'name': name, 'bytecode': bytecode, 'source': source, 'type': _type, 'meta': meta})
 
 	def dispatch(self, dispatcher, module):
 		self.send('dispatch', {'name': module, 'targets': [dispatcher]})
@@ -37,20 +43,26 @@ class DispatchPusher(object):
 	def status(self, dispatcher, job):
 		self.send('get_status', {'target': dispatcher, 'job_id': job})
 
+	def get_clients(self):
+		self.send('get_clients', {})
+
+	def get_jobs(self, dispatcher):
+		self.send('get_jobs', {'target': dispatcher})
+
 	def close(self):
 		self.stack.close()
 
 	def monitor(self):
 		while True:
 			o = self.stack.read()
-			print(o)
+			print(json.dumps(o,sort_keys=True, indent=3))
+			draw_prompt()
 
 dp = DispatchPusher(argv[1], int(argv[2]))
 a = Thread(target=dp.monitor)
 a.daemon = True
 a.start()
 
-mode = 'file'
 while True:
 	x = raw_input('[%s] ' % mode)
 
@@ -63,24 +75,46 @@ while True:
 		continue
 
 	if mode == 'file':
-		name = x.rpartition('/')[2].partition('.py')[0]
+		x = x.partition(' ')
+		_type = x[0]
+		name = x[2].rpartition('/')[2].rpartition('.')[0]
+
 		f = b''
 		try:
-			f = open(x).read()
+			f = open(x[2]).read()
 		except:
 			print(' --> Failed to read %s' % name)
+			continue
 
-		code = compile(f, name, mode='exec', dont_inherit=True)
+		bytecode = None
+		if _type == 'python':
+			try:
+				bytecode = compile(f, name, mode='exec', dont_inherit=True)
+			except:
+				print(' --> Failed to compile %s' % name)
+				continue
+
 		print(' --> Prepared %s' % name)
 
-		dp.push_module(name, code)
-	elif mode == 'dispatch':
-		x = x.partition(' ')
-		print(' --> Dispatching', x[2], 'to', x[0])
-		dp.dispatch(x[0], x[2])
+		dp.push_module(name, bytecode, f, _type, {})
+	elif mode == 'dispatcher':
+		x = x.split(' ')
+		cmd = x[0]
+		if cmd == 'dispatch':
+			print(' --> Dispatching', x[2], 'to', x[1])
+			dp.dispatch(x[1], x[2])
+		elif cmd == 'status':
+			print(' --> Getting status of', x[1]+'-'+x[2])
+			dp.status(x[1], x[2])
+		elif cmd == 'get_clients':
+			print(' --> Gettings clients')
+			dp.get_clients()
+		elif cmd == 'get_jobs':
+			print(' --> Getting jobs from', x[1])
+			dp.get_jobs(x[1])
+
 	elif mode == 'console':
 		if x == 'close':
 			dp.close()
 			raise KeyboardInterrupt()
 
-print("[PUSHER] Ready")
