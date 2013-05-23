@@ -8,45 +8,45 @@ def singleton(cls):
 		return instances[cls]
 	return getinstance
 
-class RootLibrary(object):
-	def __init__(self):
-		self.modules = {}
-
-	def createModule(self, name, _type, mod, version, description):
-		self.modules[name] = [mod, _type, version, description]
-
-	def getModule(self, name):
-		try:
-			return self.modules[name]
-		except KeyError:
-			return None
-
-	def checkModule(self, name):
-		return name in self.modules
 
 @singleton
 class RootDispatcher(object):
 	'The central controller thing'
 	def __init__(self):
 		self.clients = []
-		self.lib = RootLibrary()
+		self.modules = {}
+
+	def get_module(self, name):
+		try:
+			return self.modules[name]
+		except KeyError:
+			return None
+
+	def check_module(self, name):
+		return name in self.modules
+
+	def retrieve(self, name):
+		print('[ROOT] Retrieving:', name)
+		return self.get_module(name)
+
+	def put(self, name, bytecode, source, _type, meta):
+		print('[ROOT] Inserting:', name)
+		self.modules[name] = {
+			"name": name,
+			"bytecode": bytecode,
+			"source": source,
+			"type": _type,
+			"meta": meta
+		}
+		return self.modules[name]
 
 	def get(self, _id):
 		for i in self.clients:
 			if i.uuid == _id:
 				return i
 
-	def retrieve(self, name):
-		print('[ROOT] Dispatching:', name)
-		return self.lib.getModule(name)
-
-	def put(self, name, _type, module, version, description):
-		print('[ROOT] Inserting:', name)
-		return self.lib.createModule(name, _type, module, version, description)
-
-	def check(self, name):
-		mod = self.lib.getModule(name)
-		return (mod[1], mod[2], mod[3])
+	def get_uuids(self):
+		return [i.uuid for i in self.clients]
 
 	def register(self, d):
 		print('[ROOT] Registering:', d.uuid)
