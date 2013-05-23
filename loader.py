@@ -17,14 +17,23 @@ class DispatchLoader(object):
 
 	def get_module(self, name):
 		try:
-			return self.cache[name][0]
+			mod = self.cache[name]
+			if not mod['bytecode']:
+				return mod['source']
+			return mod['bytecode']
 		except:
 			with self.import_lock:
 				self.stack.write({'load': name, 'id': self.job})
 				o = self.stack.read()
-				if o['module'] != None:
-					self.cache[name] = o['module']
-					return self.cache[name][0]
+				mod = o['module']
+				if mod != None:
+					if mod['type'] != "python":
+						return None
+
+					self.cache[name] = mod
+					if not mod['bytecode']:
+						return mod['source']
+					return mod['bytecode']
 
 	def find_module(self, fullname, path=None):
 		if self.get_module(fullname) != None:
