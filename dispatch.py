@@ -21,6 +21,7 @@ class Job(object):
 		self.err = b''
 		self.out = b''
 		self.alive = True
+		self.ret = None
 
 	def kill(self):
 		self.p.kill()
@@ -28,15 +29,14 @@ class Job(object):
 
 	def monitor(self, cb):
 		def wait():
-			self.p.wait()
+			self.out, self.err = self.p.communicate()
+			self.ret = self.p.returncode
 			self.alive = False
 			cb(self)
 		Thread(target=wait).start()
 
 	def status(self):
-		self.out += self.p.stdout.read()
-		self.err += self.p.stderr.read()
-		return (self.out, self.err, self.modules, self.alive)
+		return (self.out, self.err, self.modules, self.alive, self.ret)
 
 	def wait(self):
 		x = self.p.wait()
@@ -60,26 +60,32 @@ class DispatchManager(object):
 		if ip != None and port != None:
 			self.connect(ip, port)
 
+	# Network boiler-plate
+
 	def connect(self, ip, port):
+		'Connect'
 		self.stack = Stack((StackableSocket(ip=ip, port=port),
 				         	  StackablePacketAssembler(),
 				         	  StackablePickler()))
 
 	def reply(self, cmd, args):
+		'Send without incrementing counter'
 		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
 
 	def send(self, cmd, args):
+		'Send'
 		self.com_id += 1
 		self.stack.write({'cmd': cmd, 'args': args, 'com_id': self.com_id})
 
 	def handle(self, obj):
+		'Command parser'
 		cmd = obj['cmd']
 		args = obj['args']
 		if cmd == 'init':
 			self.id = args['uuid']
 			print("[DISPATCHER] Setting UUID: %s" % self.id)
 		elif cmd == 'execute':
-			j = self.dispatch(args['name'])
+			self.dispatch(args['name'])
 		elif cmd == 'kill':
 			job = self.get_job(args['job_id'])
 			job.kill()
@@ -96,29 +102,41 @@ class DispatchManager(object):
 			job = self.get_job(args['job_id'])
 			self.send('status_update', {'job_id': job.id, 'status': job.status()})
 		elif cmd == 'get_jobs':
-			jobs = [{'name': job.name, 'job_id': job.id, 'modules': job.modules} for job in self.jobs]
+			jobs = [{'name': job.name, 'job_id': job.id, 'modules': job.modules} for job in self.processes]
 			self.send('job_update', {'jobs': jobs})
 
-	def monitor(self):
+	# Callbacks
+
+	def job_completed(self, job):
+		'Callback for completed job'
+		self.send('status_update', {'job_id': job.id, 'status': job.status()})
+		self.processes.remove(job)
+
+	def job_dispatched(self, job):
+		'Callback for dispatched job'
+		self.send('dispatched', {'name': job.name, 'pid': job.pid, 'job_id': job.id})
+
+	def job_failed_dispatch(self, name):
+		'Callback for failed dispatching of job'
+		self.send('dispatch_failed', {'name': name})
+
+	# Monitor threads
+
+	def net_monitor(self):
 		while True:
 			o = self.stack.read()
 			self.handle(o)
 
-	def job_completed(self, job):
-		self.send('status_update', {'job_id': job.id, 'status': job.status()})
-
-	def job_dispatched(self, job):
-		self.send('dispatched', {'name': job.name, 'pid': job.pid, 'job_id': job.id})
-
-	def job_failed_dispatch(self, name):
-		self.send('dispatch_failed', {'name': name})
+	# External interfaces
 
 	def get_job(self, _id):
+		'Retrieve a job from ID'
 		for i in self.processes:
 			if i.id == _id:
 				return i
 
 	def get_module(self, m, cb):
+		'Retrieve a job - Calls cb when done'
 		if m in self.cache:
 			cb(self.cache[m])
 			return
@@ -129,6 +147,7 @@ class DispatchManager(object):
 		self.send('get_module', {'name': m})
 
 	def dispatch(self, name):
+		'Dispatch job'
 		def callback(mod):
 			print('[DISPATCHER] Spawn of type "%s": %s' % (mod['type'], name))
 			p = None
@@ -194,4 +213,4 @@ server_thread = Thread(target=server.execute)
 server_thread.daemon = True
 server_thread.start()
 print("[DISPATCHER] Ready")
-mgr.monitor()
+mgr.net_monitor()
