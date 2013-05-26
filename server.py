@@ -22,9 +22,10 @@ class Job(object):
 		self.pid = pid
 		self.id = _id
 		self.modules = []
-		self.err = ''
-		self.out = ''
+		self.err = b''
+		self.out = b''
 		self.alive = True
+		self.ret = None
 
 class Dispatcher(RequestObject):
 	'The connection objects - represents a connected dispatching node'
@@ -128,7 +129,7 @@ class Dispatcher(RequestObject):
 		elif cmd == 'get_jobs':
 			try:
 				client = root.get(args['target'])
-				jobs = [{'id': i.id, 'name': i.name, 'modules': i.modules, 'alive': i.alive, 'pid': i.pid} for i in client.jobs]
+				jobs = [{'job_id': i.id, 'name': i.name, 'modules': i.modules, 'alive': i.alive, 'pid': i.pid} for i in client.jobs]
 				self.reply('job_list', {'jobs': jobs, 'target': client.uuid})
 				self.reply('return', {'status': 0, 'cmd': 'get_clients'})
 			except:
@@ -158,6 +159,7 @@ class Dispatcher(RequestObject):
 					job.err = status[1]
 					job.modules = status[2]
 					job.alive = status[3]
+					job.ret = status[4]
 					if not job.alive:
 						self.print_status(job)
 			except:
@@ -171,7 +173,7 @@ class Dispatcher(RequestObject):
 			if obj != None:
 				self.handle(obj)
 			return True
-		except StackableError:
+		except:
 			return False
 
 if __name__ == '__main__':
