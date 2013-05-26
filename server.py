@@ -129,7 +129,7 @@ class Dispatcher(RequestObject):
 		elif cmd == 'get_jobs':
 			try:
 				client = root.get(args['target'])
-				jobs = [{'job_id': i.id, 'name': i.name, 'modules': i.modules, 'alive': i.alive, 'pid': i.pid} for i in client.jobs]
+				jobs = [{'job_id': i.id, 'name': i.name, 'modules': i.modules, 'alive': i.alive, 'ret': i.ret, 'pid': i.pid} for i in client.jobs]
 				self.reply('job_list', {'jobs': jobs, 'target': client.uuid})
 				self.reply('return', {'status': 0, 'cmd': 'get_clients'})
 			except:
