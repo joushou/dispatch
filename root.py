@@ -16,18 +16,12 @@ class RootDispatcher(object):
 		self.clients = []
 		self.modules = {}
 
-	def get_module(self, name):
-		try:
-			return self.modules[name]
-		except KeyError:
-			return None
-
 	def check_module(self, name):
 		return name in self.modules
 
 	def retrieve(self, name):
 		print('[ROOT] Retrieving:', name)
-		return self.get_module(name)
+		return self.modules[name]
 
 	def put(self, name, bytecode, source, _type, meta):
 		print('[ROOT] Inserting:', name)
