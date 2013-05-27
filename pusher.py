@@ -8,11 +8,10 @@ from runnable.network import RunnableServer, RequestObject
 from subprocess import Popen, PIPE
 from threading import Thread, Lock
 from sys import argv, stdout
-import json
+import shlex, json, os
 
-mode = 'dispatcher'
 def draw_prompt():
-	stdout.write('\n[%s] ' % mode)
+	stdout.write('\n[pusher] ')
 	stdout.flush()
 
 class DispatchPusher(object):
@@ -98,8 +97,6 @@ def prepare_client_stats(mgr):
 		pending -= 1
 		if pending == 0:
 			clients = temp_clients
-			print(" --> Client statistics updated")
-			draw_prompt()
 
 	mgr.register_cb("client_list", update_clients)
 	mgr.register_cb("job_list", update_jobs)
@@ -109,89 +106,99 @@ prepare_client_stats(dp)
 def update_client_stats(mgr):
 	mgr.get_clients()
 
+def add_file(_type, name, filename):
+	f = None
+	try:
+		f = open(filename).read()
+	except:
+		print(' --> failed to read %s' % filename)
+		return
+
+	bytecode = None
+	# if _type == 'python':
+	# 	try:
+	# 		bytecode = compile(f, name, mode='exec', dont_inherit=True)
+	# 	except:
+	# 		print(' --> Failed to compile %s' % name)
+	# 		return
+
+	print(' --> Prepared %s' % name)
+	dp.push_module(name, bytecode, f, _type, {})
+
+supported_filetypes = {
+	'python': ['py'],
+	'shell': ['sh', ''],
+	'ruby': ['rb']
+}
+
 while True:
-	x = raw_input('[%s] ' % mode)
+	x = raw_input('[pusher] ')
+	x = shlex.split(x)
 
-	if x[:2] == '!!':
-		part = x[2:].partition(" ")
-		mode = part[0]
-		x = part[2]
-
-		print(' --> Changing mode to %s' % mode)
-
-	if x == '':
+	if len(x) == 0:
 		continue
 
-	if mode == 'file':
-		x = x.partition(' ')
-		_type = x[0]
-		name = x[2].rpartition('/')[2].rpartition('.')[0]
-
-		f = b''
-		try:
-			f = open(x[2]).read()
-		except:
-			print(' --> Failed to read %s' % name)
-			continue
-
-		bytecode = None
-		if _type == 'python':
-			try:
-				bytecode = compile(f, name, mode='exec', dont_inherit=True)
-			except:
-				print(' --> Failed to compile %s' % name)
-				continue
-
-		print(' --> Prepared %s' % name)
-
-		dp.push_module(name, bytecode, f, _type, {})
-	elif mode == 'dispatcher':
-		x = x.split(' ')
-		cmd = x[0]
-		if cmd == 'dispatch':
-			print(' --> Dispatching', x[2], 'to', x[1])
-			dp.dispatch(x[1], x[2])
-		elif cmd == 'status':
-			print(' --> Getting status of', x[1]+'-'+x[2])
-			dp.status(x[1], x[2])
-		elif cmd == 'get_clients':
-			print(' --> Gettings clients')
-			dp.get_clients()
-		elif cmd == 'get_jobs':
-			print(' --> Getting jobs from', x[1])
-			dp.get_jobs(x[1])
-		elif cmd == 'update_stats':
-			print(' --> Updating client statistics')
-			update_client_stats(dp)
-		elif cmd == 'view_stats':
-			print(' --> Displaying client statistics')
-			for i in clients:
-				print(i)
-				alive_jobs = []
-				done_jobs = []
-				for y in clients[i]['jobs']:
-					if y['alive']:
-						alive_jobs.append(y)
-					else:
-						done_jobs.append(y)
-				print('  Running jobs:   %d' % len(alive_jobs))
-				for x in alive_jobs:
-					print('    %s' % x['name'])
-					print('       id:  %d' % x['job_id'])
-					print('       pid: %d' % x['pid'])
-					print('       modules')
-					for y in x['modules']:
-						print('          %s' % y)
-				print('  Completed jobs: %d' % len(done_jobs))
-				for x in done_jobs:
-					print('    %s' % x['name'])
-					print('       id:  %d' % x['job_id'])
-					print('       pid: %d' % x['pid'])
-					print('       ret: %d' % x['ret'])
-					print('       modules')
-					for y in x['modules']:
-						print('          %s' % y)
-		elif cmd == 'close':
-			dp.close()
-			break
+	cmd = x[0]
+	if cmd == 'add':
+		_type = x[1]
+		name = x[2]
+		filename = x[3]
+		if os.path.isdir(filename):
+			for root, dirs, files in os.walk(filename):
+				if root != '':
+					fixed_root = root.replace('/', '.').replace(root.partition('/')[0], name)+'.'
+				for _file in files:
+					file_part = _file.partition('.')
+					if file_part[2] in supported_filetypes[_type]:
+						add_file(_type, fixed_root+file_part[0], os.path.join(root, _file))
+		elif os.path.isfile(filename):
+			add_file(_type, name, filename)
+		else:
+			print(' --> Path does not exist')
+	elif cmd == 'dispatch':
+		print(' --> Dispatching', x[2], 'to', x[1])
+		dp.dispatch(x[1], x[2])
+	elif cmd == 'status':
+		print(' --> Getting status of', x[1]+'-'+x[2])
+		dp.status(x[1], x[2])
+	elif cmd == 'get_clients':
+		print(' --> Gettings clients')
+		dp.get_clients()
+	elif cmd == 'get_jobs':
+		print(' --> Getting jobs from', x[1])
+		dp.get_jobs(x[1])
+	elif cmd == 'update_stats':
+		print(' --> Updating client statistics')
+		update_client_stats(dp)
+	elif cmd == 'view_stats':
+		print(' --> Displaying client statistics')
+		for i in clients:
+			print(i)
+			alive_jobs = []
+			done_jobs = []
+			for y in clients[i]['jobs']:
+				if y['alive']:
+					alive_jobs.append(y)
+				else:
+					done_jobs.append(y)
+			print('  Running jobs:   %d' % len(alive_jobs))
+			for z in alive_jobs:
+				print('    %s' % z['name'])
+				print('       id:  %d' % z['job_id'])
+				print('       pid: %d' % z['pid'])
+				print('       modules')
+				for y in z['modules']:
+					print('          %s' % y)
+			print('  Completed jobs: %d' % len(done_jobs))
+			for z in done_jobs:
+				print('    %s' % z['name'])
+				print('       id:  %d' % z['job_id'])
+				print('       pid: %d' % z['pid'])
+				print('       ret: %d' % z['ret'])
+				print('       modules')
+				for y in z['modules']:
+					print('          %s' % y)
+	elif cmd == 'close' or cmd == 'quit' or cmd == 'exit':
+		dp.close()
+		break
 
