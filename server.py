@@ -13,7 +13,17 @@ from uuid import uuid4
 root = RootDispatcher()
 
 # root.put("welcome", "python", compile('print("Welcome")', "<root dispatcher>", mode='exec'), 0.1, "Greeting message")
-root.put("welcome1", None, "echo Hello from your $SHELL", "shell", {'description': "Greeting message"})
+# root.put("welcome1", None, "echo Hello from your $SHELL", "shell", {'description': "Greeting message"})
+root.put("test", None, "import welcome1", "python", {})
+# root.put("test", None, "import welcome.welcome1", "python", {})
+
+root.put("welcome1", None, "import welcome2", "python", {})
+root.put("welcome2", None, "import welcome3", "python", {})
+root.put("welcome3", None, "print('Welcome!')", "python", {})
+root.put("welcome", None, "", "python", {})
+root.put("welcome.welcome1", None, "import welcome2", "python", {})
+root.put("welcome.welcome2", None, "import welcome3", "python", {})
+root.put("welcome.welcome3", None, "print('Welcome!')", "python", {})
 # root.put("welcome1", "shell", "echo Hello from your $SHELL!", 0.1, "Greeting message")
 
 class Job(object):
@@ -39,7 +49,7 @@ class Dispatcher(RequestObject):
 		root.register(self)
 		self.send('init', {'uuid': self.uuid})
 		# self.dispatch('welcome')
-		self.dispatch('welcome1')
+		self.dispatch('test')
 
 	def destroy(self):
 		root.deregister(self)
@@ -83,6 +93,7 @@ class Dispatcher(RequestObject):
 				self.reply('module_update', {'module': mod})
 				self.reply('return', {'status': 0, 'cmd': 'get_module'})
 			except:
+				self.reply('module_update', {'not_found': args['name']})
 				self.reply('return', {'status': -1, 'cmd': 'get_module'})
 		elif cmd == 'probe_module':
 			try:
