@@ -92,12 +92,17 @@ class DispatchManager(object):
 			self.send('status_update', {'job_id': job.id, 'status': job.status()})
 			self.processes.remove(job)
 		elif cmd == 'module_update':
-			mod = args['module']
-			name = mod['name']
-			self.cache[name] = mod
+			mod = None
+			name = ''
+			if 'not_found' in args:
+				name = args['not_found']
+			elif 'module' in args:
+				mod = args['module']
+				name = mod['name']
+				self.cache[name] = mod
 			if name in self.mod_cbs:
 				for i in self.mod_cbs[name]:
-					i(self.cache[name])
+					i(mod)
 		elif cmd == 'get_status':
 			job = self.get_job(args['job_id'])
 			self.send('status_update', {'job_id': job.id, 'status': job.status()})
@@ -153,12 +158,11 @@ class DispatchManager(object):
 			p = None
 			if mod['type'] == 'python':
 				p = Job(name, Popen(['pypy', '-c', '''
-from sys import meta_path
-from loader import DispatchLoader as __l
-__dispatch__ = __l('%s', %d, %d)
-meta_path = [__dispatch__]
-del meta_path
-exec __dispatch__.get_module('%s')''' % ("localhost", 2001, self.job_cnt, name)], stdout=PIPE, stderr=PIPE), self.job_cnt)
+import sys, loader
+__dispatch__ = loader.DispatchLoader('%s', %d, %d)
+sys.meta_path = [__dispatch__]
+del loader, sys
+__dispatch__.execute('%s', globals())''' % ("localhost", 2001, self.job_cnt, name)], stdout=PIPE, stderr=PIPE), self.job_cnt)
 			elif mod['type'] in self.universal_handlers:
 				t = NamedTemporaryFile(delete=False)
 				t.write(mod['source'])
